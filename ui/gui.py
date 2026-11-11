@@ -1,3 +1,4 @@
+import math
 import os
 import pygame
 from game.hanoi_game import HanoiGame
@@ -12,6 +13,11 @@ def load_image(name):
         return pygame.image.load(path).convert_alpha()
     except (pygame.error, FileNotFoundError):
         return None
+
+
+def format_time(seconds):
+    total = max(0, int(seconds))
+    return f"{total // 60:02d}:{total % 60:02d}"
 
 
 class HanoiGUI:
@@ -54,6 +60,7 @@ class HanoiGUI:
     DISK_UNITS_MAX = 56
 
     ERROR_SECONDS = 3
+    TIME_WARNING_SECONDS = 10
 
     COLOR_PANEL = (24, 14, 52)
     COLOR_BUTTON = (92, 58, 28)
@@ -196,7 +203,10 @@ class HanoiGUI:
             self.set_error(str(error))
 
     def update(self):
-        pass
+        if self.state == "playing":
+            self.game.update_time()
+            if self.game.is_over():
+                self.selected_tower = None
 
     def set_error(self, message):
         self.error_message = message
@@ -295,6 +305,18 @@ class HanoiGUI:
         self.draw_text(label, font or self.font_mid, self.COLOR_TEXT,
                        center=rect.center)
 
+    def draw_timer(self):
+        if self.game.get_mode() == HanoiGame.MODE_TIMED:
+            left = self.game.get_time_left()
+            color = self.COLOR_TEXT
+            if left <= self.TIME_WARNING_SECONDS:
+                color = self.COLOR_ERROR
+            label = f"RESTA: {format_time(math.ceil(left))}"
+        else:
+            color = self.COLOR_TEXT
+            label = f"TIEMPO: {format_time(self.game.get_elapsed())}"
+        self.draw_text(label, self.font_mid, color, topleft=(24, 130))
+
     def draw_hud(self):
         self.draw_button(self.BTN_MENU, "MENU")
         self.draw_button(self.BTN_RETRY, "RETRY")
@@ -308,6 +330,7 @@ class HanoiGUI:
             self.game.get_mode(), self.game.get_mode().upper())
         self.draw_text(f"MODO: {mode_label}", self.font_small,
                        self.COLOR_TEXT, topleft=(24, 96))
+        self.draw_timer()
         self.draw_text("Esc: menú | R: reintentar", self.font_small,
                        self.COLOR_TEXT, center=(self.WIDTH - 170, 34))
 
@@ -325,7 +348,6 @@ class HanoiGUI:
         self.screen.blit(text, text.get_rect(center=box.center))
 
     def draw_end_panel(self):
-        """Panel de victoria o derrota según el estado del juego."""
         veil = pygame.Surface((self.WIDTH, self.HEIGHT), pygame.SRCALPHA)
         veil.fill((0, 0, 0, 150))
         self.screen.blit(veil, (0, 0))
@@ -335,13 +357,17 @@ class HanoiGUI:
 
         moves = self.game.get_moves()
         minimum = self.game.get_min_moves()
+        elapsed = self.game.get_elapsed()
         cx = self.WIDTH // 2
 
         if self.game.is_lost():
             border_color = self.COLOR_LOSE
             title = "PERDISTE"
             title_color = self.COLOR_LOSE
-            note = "Superaste el mínimo de movimientos"
+            if self.game.is_timed_out():
+                note = "Se acabó el tiempo"
+            else:
+                note = "Superaste el mínimo de movimientos"
         else:
             border_color = self.COLOR_WIN
             title = "¡GANASTE!"
@@ -352,12 +378,14 @@ class HanoiGUI:
                 note = f"Te pasaste por {moves - minimum} movimientos"
 
         pygame.draw.rect(self.screen, border_color, panel, 4)
-        self.draw_text(title, self.font_big, title_color, center=(cx, 190))
+        self.draw_text(title, self.font_big, title_color, center=(cx, 180))
         self.draw_text(f"Movimientos: {moves}", self.font_mid, self.COLOR_TEXT,
-                       center=(cx, 262))
+                       center=(cx, 240))
         self.draw_text(f"Mínimo: {minimum}", self.font_mid, self.COLOR_TEXT,
-                       center=(cx, 304))
-        self.draw_text(note, self.font_small, title_color, center=(cx, 348))
+                       center=(cx, 277))
+        self.draw_text(f"Tiempo: {format_time(elapsed)}", self.font_mid,
+                       self.COLOR_TEXT, center=(cx, 314))
+        self.draw_text(note, self.font_small, title_color, center=(cx, 352))
         self.draw_button(self.BTN_WIN_RETRY, "RETRY")
         self.draw_button(self.BTN_WIN_MENU, "MENU")
 
@@ -383,7 +411,11 @@ class HanoiGUI:
 
         mode_label = self.MODE_LABELS.get(
             self.menu_mode, self.menu_mode.upper())
-        self.draw_text(f"MODO: {mode_label}", self.font, self.COLOR_TEXT,
+        mode_text = f"MODO: {mode_label}"
+        if self.menu_mode == HanoiGame.MODE_TIMED:
+            limit = HanoiGame.time_limit_for(self.menu_disks)
+            mode_text = f"MODO: {mode_label} ({format_time(limit)})"
+        self.draw_text(mode_text, self.font, self.COLOR_TEXT,
                        center=(cx, 360))
         self.draw_text("A / D para cambiar modo", self.font_small, self.COLOR_TEXT,
                        center=(cx, 390))

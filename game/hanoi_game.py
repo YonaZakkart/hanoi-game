@@ -1,3 +1,6 @@
+import math
+import time
+
 from models.tower import Tower
 
 
@@ -11,7 +14,10 @@ class HanoiGame:
     MODE_TIMED = "timed"
     MODES = (MODE_NORMAL, MODE_PERFECT, MODE_TIMED)
 
-    def __init__(self, num_disks, mode=MODE_NORMAL):
+    SECONDS_PER_MOVE = 1.5
+    MIN_TIME_LIMIT = 20
+
+    def __init__(self, num_disks, mode=MODE_NORMAL, clock=time.monotonic):
         if not isinstance(num_disks, int) or isinstance(num_disks, bool):
             raise ValueError("El número de discos debe ser un entero.")
         if num_disks < self.MIN_DISKS or num_disks > self.MAX_DISKS:
@@ -25,10 +31,23 @@ class HanoiGame:
         self.num_disks = num_disks
         self.mode = mode
         self.min_moves = 2 ** num_disks - 1
+        self._clock = clock
+        if mode == self.MODE_TIMED:
+            self.time_limit = self.time_limit_for(num_disks)
+        else:
+            self.time_limit = None
         self.towers = []
         self.moves = 0
         self.lost = False
+        self.timed_out = False
+        self._start_time = None
+        self._end_time = None
         self.reset()
+
+    @classmethod
+    def time_limit_for(cls, num_disks):
+        minimum = 2 ** num_disks - 1
+        return max(cls.MIN_TIME_LIMIT, int(math.ceil(minimum * cls.SECONDS_PER_MOVE)))
 
     def reset(self):
         self.towers = [Tower() for _ in range(self.NUM_TOWERS)]
@@ -36,6 +55,9 @@ class HanoiGame:
             self.towers[0].push(disk)
         self.moves = 0
         self.lost = False
+        self.timed_out = False
+        self._start_time = None
+        self._end_time = None
 
     def _validate_index(self, index):
         if not isinstance(index, int) or isinstance(index, bool):
@@ -61,7 +83,36 @@ class HanoiGame:
             return True
         return origin.peek() < destination.peek()
 
+    def update_time(self):
+        if self.mode != self.MODE_TIMED:
+            return
+        if self._start_time is None or self._end_time is not None:
+            return
+        if self.get_elapsed() >= self.time_limit:
+            self.timed_out = True
+            self._end_time = self._start_time + self.time_limit
+
+    def get_elapsed(self):
+        if self._start_time is None:
+            return 0.0
+        if self._end_time is not None:
+            end = self._end_time
+        else:
+            end = self._clock()
+        return max(0.0, end - self._start_time)
+
+    def get_time_left(self):
+        if self.time_limit is None:
+            return None
+        return max(0.0, self.time_limit - self.get_elapsed())
+
+    def get_time_limit(self):
+        return self.time_limit
+
     def move(self, from_tower, to_tower):
+        self.update_time()
+        if self.timed_out:
+            raise ValueError("Se acabó el tiempo.")
         if self.lost:
             raise ValueError("La partida ya está perdida.")
         self._validate_index(from_tower)
@@ -76,12 +127,18 @@ class HanoiGame:
         if not destination.is_empty() and origin.peek() > destination.peek():
             raise ValueError(
                 "No se puede colocar un disco grande sobre uno más pequeño.")
+        if self._start_time is None:
+            self._start_time = self._clock()
         disk = origin.pop()
         destination.push(disk)
         self.moves += 1
 
         if self.mode == self.MODE_PERFECT and self.moves > self.min_moves:
             self.lost = True
+
+        if self._end_time is None:
+            if self.lost or self.towers[2].size() == self.num_disks:
+                self._end_time = self._clock()
 
         return disk
 
@@ -94,10 +151,12 @@ class HanoiGame:
         return self.is_finished()
 
     def is_lost(self):
-        return self.lost
+        return self.lost or self.timed_out
+
+    def is_timed_out(self):
+        return self.timed_out
 
     def is_over(self):
-        """Partida terminada (ganada o perdida)."""
         return self.is_finished() or self.is_lost()
 
     def get_mode(self):
