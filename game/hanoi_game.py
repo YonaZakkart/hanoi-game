@@ -17,6 +17,8 @@ class HanoiGame:
     SECONDS_PER_MOVE = 1.5
     MIN_TIME_LIMIT = 20
 
+    UNDO_WINDOW = 5
+
     def __init__(self, num_disks, mode=MODE_NORMAL, clock=time.monotonic):
         if not isinstance(num_disks, int) or isinstance(num_disks, bool):
             raise ValueError("El número de discos debe ser un entero.")
@@ -42,6 +44,7 @@ class HanoiGame:
         self.timed_out = False
         self._start_time = None
         self._end_time = None
+        self._last_move = None
         self.reset()
 
     @classmethod
@@ -58,6 +61,7 @@ class HanoiGame:
         self.timed_out = False
         self._start_time = None
         self._end_time = None
+        self._last_move = None
 
     def _validate_index(self, index):
         if not isinstance(index, int) or isinstance(index, bool):
@@ -132,6 +136,7 @@ class HanoiGame:
         disk = origin.pop()
         destination.push(disk)
         self.moves += 1
+        self._last_move = (from_tower, to_tower, self._clock())
 
         if self.mode == self.MODE_PERFECT and self.moves > self.min_moves:
             self.lost = True
@@ -140,6 +145,36 @@ class HanoiGame:
             if self.lost or self.towers[2].size() == self.num_disks:
                 self._end_time = self._clock()
 
+        return disk
+
+    def can_undo(self):
+        self.update_time()
+        if self._last_move is None or self.is_over():
+            return False
+        return self._clock() - self._last_move[2] <= self.UNDO_WINDOW
+
+    def get_undo_time_left(self):
+        if not self.can_undo():
+            return 0.0
+        elapsed = self._clock() - self._last_move[2]
+        return max(0.0, self.UNDO_WINDOW - elapsed)
+
+    def undo(self):
+        self.update_time()
+        if self.is_over():
+            raise ValueError("No se puede deshacer: la partida ya terminó.")
+        if self._last_move is None:
+            raise ValueError("No hay ningún movimiento para deshacer.")
+        from_tower, to_tower, when = self._last_move
+        if self._clock() - when > self.UNDO_WINDOW:
+            raise ValueError(
+                f"Ya no se puede deshacer (límite de {self.UNDO_WINDOW} segundos).")
+        disk = self.towers[to_tower].pop()
+        self.towers[from_tower].push(disk)
+        self.moves -= 1
+        self._last_move = None
+        if self.moves == 0:
+            self._start_time = None
         return disk
 
     def is_finished(self):
