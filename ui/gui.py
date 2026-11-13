@@ -68,6 +68,8 @@ class HanoiGUI:
     COLOR_ERROR = (255, 90, 90)
     COLOR_WIN = (255, 220, 60)
     COLOR_LOSE = (255, 120, 100)
+    COLOR_BUTTON_DISABLED = (60, 48, 70)
+    COLOR_TEXT_DISABLED = (150, 140, 160)
 
     BTN_MENU = pygame.Rect(70, 540, 200, 52)
     BTN_RETRY = pygame.Rect(380, 540, 200, 52)
@@ -76,6 +78,7 @@ class HanoiGUI:
     BTN_START = pygame.Rect(380, 430, 200, 64)
     BTN_WIN_RETRY = pygame.Rect(290, 380, 180, 56)
     BTN_WIN_MENU = pygame.Rect(490, 380, 180, 56)
+    BTN_UNDO = pygame.Rect(750, 54, 180, 44)
 
     MODE_LABELS = {
         HanoiGame.MODE_NORMAL: "NORMAL",
@@ -202,6 +205,14 @@ class HanoiGUI:
         except ValueError as error:
             self.set_error(str(error))
 
+    def try_undo(self):
+        self.selected_tower = None
+        self.error_message = ""
+        try:
+            self.game.undo()
+        except ValueError as error:
+            self.set_error(str(error))
+
     def update(self):
         if self.state == "playing":
             self.game.update_time()
@@ -281,6 +292,8 @@ class HanoiGUI:
             self.go_to_menu()
         elif self.BTN_RETRY.collidepoint(pos):
             self.start_game(self.game.num_disks, self.game.get_mode())
+        elif self.BTN_UNDO.collidepoint(pos):
+            self.try_undo()
         else:
             self.handle_click(pos)
 
@@ -333,6 +346,23 @@ class HanoiGUI:
         self.draw_timer()
         self.draw_text("Esc: menú | R: reintentar", self.font_small,
                        self.COLOR_TEXT, center=(self.WIDTH - 170, 34))
+        self.draw_undo_button()
+
+    def draw_undo_button(self):
+        rect = self.BTN_UNDO
+        left = self.game.get_undo_time_left()
+        if left > 0:
+            self.draw_button(rect, f"DESHACER ({math.ceil(left)}s)",
+                             self.font_small)
+            fraction = left / HanoiGame.UNDO_WINDOW
+            bar = pygame.Rect(rect.x + 10, rect.bottom - 12,
+                              int((rect.width - 20) * fraction), 6)
+            pygame.draw.rect(self.screen, self.COLOR_SELECTION, bar)
+        else:
+            pygame.draw.rect(self.screen, self.COLOR_BUTTON_DISABLED, rect)
+            pygame.draw.rect(self.screen, self.COLOR_DISK_BORDER, rect, 4)
+            self.draw_text("DESHACER", self.font_small,
+                           self.COLOR_TEXT_DISABLED, center=rect.center)
 
     def draw_error(self):
         if not self.error_message:
