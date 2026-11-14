@@ -86,6 +86,11 @@ class HanoiGUI:
         HanoiGame.MODE_TIMED: "CONTRARRELOJ",
     }
 
+    START_LABELS = {
+        HanoiGame.START_STANDARD: "CLÁSICO",
+        HanoiGame.START_MIXED: "MIXTO",
+    }
+
     def __init__(self, num_disks=3, show_menu=True):
         pygame.init()
         pygame.display.set_caption("Torre de Hanói")
@@ -113,6 +118,7 @@ class HanoiGUI:
         self.state = "menu" if show_menu else "playing"
         self.menu_disks = num_disks
         self.menu_mode = HanoiGame.MODE_NORMAL
+        self.menu_start = HanoiGame.START_STANDARD
 
     def tower_center_x(self, index):
         section = self.WIDTH // self.NUM_TOWERS
@@ -228,12 +234,27 @@ class HanoiGUI:
         idx = modes.index(self.menu_mode)
         self.menu_mode = modes[(idx + delta) % len(modes)]
 
-    def start_game(self, num_disks, mode=None):
+    def change_menu_start(self, delta):
+        starts = list(HanoiGame.STARTS)
+        idx = starts.index(self.menu_start)
+        self.menu_start = starts[(idx + delta) % len(starts)]
+
+    def start_game(self, num_disks, mode=None, start=None):
         if mode is None:
             mode = self.menu_mode
-        self.game = HanoiGame(num_disks, mode=mode)
+        if start is None:
+            start = self.menu_start
+        self.game = HanoiGame(num_disks, mode=mode, start=start)
         self.menu_disks = num_disks
         self.menu_mode = mode
+        self.menu_start = start
+        self.selected_tower = None
+        self.error_message = ""
+        self.state = "playing"
+
+    def restart_game(self):
+        """RETRY: repite la misma partida (mismo estado inicial, aunque sea mixto)."""
+        self.game.reset()
         self.selected_tower = None
         self.error_message = ""
         self.state = "playing"
@@ -257,7 +278,7 @@ class HanoiGUI:
         elif key == pygame.K_ESCAPE:
             self.go_to_menu()
         elif key == pygame.K_r:
-            self.start_game(self.game.num_disks, self.game.get_mode())
+            self.restart_game()
 
     def handle_menu_key(self, key):
         if key in (pygame.K_UP, pygame.K_RIGHT):
@@ -268,6 +289,10 @@ class HanoiGUI:
             self.change_menu_mode(-1)
         elif key == pygame.K_d:
             self.change_menu_mode(1)
+        elif key == pygame.K_w:
+            self.change_menu_start(-1)
+        elif key == pygame.K_s:
+            self.change_menu_start(1)
         elif key in (pygame.K_RETURN, pygame.K_KP_ENTER):
             self.start_game(self.menu_disks, self.menu_mode)
 
@@ -283,7 +308,7 @@ class HanoiGUI:
 
         if self.game.is_over():
             if self.BTN_WIN_RETRY.collidepoint(pos):
-                self.start_game(self.game.num_disks, self.game.get_mode())
+                self.restart_game()
             elif self.BTN_WIN_MENU.collidepoint(pos):
                 self.go_to_menu()
             return
@@ -291,7 +316,7 @@ class HanoiGUI:
         if self.BTN_MENU.collidepoint(pos):
             self.go_to_menu()
         elif self.BTN_RETRY.collidepoint(pos):
-            self.start_game(self.game.num_disks, self.game.get_mode())
+            self.restart_game()
         elif self.BTN_UNDO.collidepoint(pos):
             self.try_undo()
         else:
@@ -344,6 +369,10 @@ class HanoiGUI:
         self.draw_text(f"MODO: {mode_label}", self.font_small,
                        self.COLOR_TEXT, topleft=(24, 96))
         self.draw_timer()
+        start_label = self.START_LABELS.get(
+            self.game.get_start(), self.game.get_start().upper())
+        self.draw_text(f"INICIO: {start_label}", self.font_small,
+                       self.COLOR_TEXT, topleft=(24, 168))
         self.draw_text("Esc: menú | R: reintentar", self.font_small,
                        self.COLOR_TEXT, center=(self.WIDTH - 170, 34))
         self.draw_undo_button()
@@ -443,16 +472,24 @@ class HanoiGUI:
             self.menu_mode, self.menu_mode.upper())
         mode_text = f"MODO: {mode_label}"
         if self.menu_mode == HanoiGame.MODE_TIMED:
-            limit = HanoiGame.time_limit_for(self.menu_disks)
-            mode_text = f"MODO: {mode_label} ({format_time(limit)})"
+            if self.menu_start == HanoiGame.START_STANDARD:
+                limit = HanoiGame.time_limit_for(self.menu_disks)
+                mode_text = f"MODO: {mode_label} ({format_time(limit)})"
+            else:
+                # con inicio mixto el límite depende del estado que salga
+                mode_text = f"MODO: {mode_label} (según inicio)"
         self.draw_text(mode_text, self.font, self.COLOR_TEXT,
-                       center=(cx, 360))
-        self.draw_text("A / D para cambiar modo", self.font_small, self.COLOR_TEXT,
-                       center=(cx, 390))
+                       center=(cx, 350))
+        start_label = self.START_LABELS.get(
+            self.menu_start, self.menu_start.upper())
+        self.draw_text(f"INICIO: {start_label}", self.font, self.COLOR_TEXT,
+                       center=(cx, 380))
+        self.draw_text("A/D: modo | W/S: inicio", self.font_small,
+                       self.COLOR_TEXT, center=(cx, 408))
 
         self.draw_button(self.BTN_START, "START")
         self.draw_text(
-            "Flechas: discos | A/D: modo | Enter: empezar | Esc: salir",
+            "Flechas: discos | Enter: empezar | Esc: salir",
             self.font_small, self.COLOR_TEXT, center=(cx, 500))
 
     def draw_background(self):
