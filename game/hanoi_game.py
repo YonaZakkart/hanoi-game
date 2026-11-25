@@ -72,6 +72,8 @@ class HanoiGame:
         self._start_time = None
         self._end_time = None
         self._last_move = None
+        self.hints_used = 0
+        self.auto_solved = False
         self.reset()
 
     @classmethod
@@ -162,6 +164,51 @@ class HanoiGame:
         """Movimientos óptimos que faltan desde el estado ACTUAL."""
         return self.optimal_moves(self.get_state())
 
+    def get_hint(self):
+        """Siguiente movimiento óptimo (origen, destino) desde el estado ACTUAL.
+
+        No modifica la partida ni cuenta como pista usada. Devuelve None si la
+        partida ya terminó. No arranca el cronómetro.
+        """
+        solution = self.get_solution()
+        return solution[0] if solution else None
+
+    def get_solution(self):
+        """Lista completa de movimientos óptimos que faltan (vacía si terminó)."""
+        self.update_time()
+        if self.is_over():
+            return []
+        return self.get_optimal_moves()
+
+    def use_hint(self):
+        """Pide una pista y la cuenta en hints_used. None si no hay pista."""
+        hint = self.get_hint()
+        if hint is not None:
+            self.hints_used += 1
+        return hint
+
+    def auto_step(self):
+        """Ejecuta el siguiente movimiento óptimo con move() (respeta reglas,
+        contador y cronómetro) y marca la partida como resuelta con ayuda.
+        Devuelve (origen, destino). ValueError si no hay nada que hacer o si
+        move() rechaza el movimiento (por ejemplo, se acabó el tiempo).
+        """
+        hint = self.get_hint()
+        if hint is None:
+            raise ValueError("No hay movimientos pendientes.")
+        self.move(*hint)
+        self.auto_solved = True
+        return hint
+
+    def get_hints_used(self):
+        return self.hints_used
+
+    def was_auto_solved(self):
+        return self.auto_solved
+
+    def is_assisted(self):
+        return self.auto_solved or self.hints_used > 0
+
     def get_initial_state(self):
         return [list(tower) for tower in self._initial_state]
 
@@ -179,6 +226,8 @@ class HanoiGame:
         self._start_time = None
         self._end_time = None
         self._last_move = None
+        self.hints_used = 0
+        self.auto_solved = False
 
     def _validate_index(self, index):
         if not isinstance(index, int) or isinstance(index, bool):
