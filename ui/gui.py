@@ -61,6 +61,8 @@ class HanoiGUI:
 
     ERROR_SECONDS = 3
     TIME_WARNING_SECONDS = 10
+    HINT_SECONDS = 4
+    AUTO_SOLVE_INTERVAL_MS = 400
 
     COLOR_PANEL = (24, 14, 52)
     COLOR_BUTTON = (92, 58, 28)
@@ -70,6 +72,7 @@ class HanoiGUI:
     COLOR_LOSE = (255, 120, 100)
     COLOR_BUTTON_DISABLED = (60, 48, 70)
     COLOR_TEXT_DISABLED = (150, 140, 160)
+    COLOR_HINT = (90, 230, 130)
 
     BTN_MENU = pygame.Rect(70, 540, 200, 52)
     BTN_RETRY = pygame.Rect(380, 540, 200, 52)
@@ -79,6 +82,8 @@ class HanoiGUI:
     BTN_WIN_RETRY = pygame.Rect(290, 380, 180, 56)
     BTN_WIN_MENU = pygame.Rect(490, 380, 180, 56)
     BTN_UNDO = pygame.Rect(750, 54, 180, 44)
+    BTN_HINT = pygame.Rect(750, 104, 180, 34)
+    BTN_SOLVE = pygame.Rect(750, 144, 180, 34)
 
     MODE_LABELS = {
         HanoiGame.MODE_NORMAL: "NORMAL",
@@ -114,6 +119,11 @@ class HanoiGUI:
         self.selected_tower = None
         self.error_message = ""
         self.error_until = 0
+
+        self.hint = None
+        self.hint_until = 0
+        self.auto_solving = False
+        self.auto_next = 0
 
         self.state = "menu" if show_menu else "playing"
         self.menu_disks = num_disks
@@ -208,12 +218,62 @@ class HanoiGUI:
             return
         try:
             self.game.move(origin, clicked)
+            self.clear_hint()
         except ValueError as error:
             self.set_error(str(error))
+
+    def clear_hint(self):
+        self.hint = None
+        self.hint_until = 0
+
+    def try_hint(self):
+        """Resalta origen y destino del siguiente movimiento óptimo."""
+        if self.game.is_over():
+            return
+        self.error_message = ""
+        hint = self.game.use_hint()
+        if hint is None:
+            return
+        self.hint = hint
+        self.hint_until = pygame.time.get_ticks() + self.HINT_SECONDS * 1000
+
+    def start_auto_solve(self):
+        """Resolver automáticamente: un movimiento óptimo cada intervalo."""
+        if self.game.is_over() or self.game.get_hint() is None:
+            return
+        self.selected_tower = None
+        self.error_message = ""
+        self.clear_hint()
+        self.auto_solving = True
+        self.auto_next = pygame.time.get_ticks()
+
+    def stop_auto_solve(self):
+        self.auto_solving = False
+
+    def toggle_auto_solve(self):
+        if self.auto_solving:
+            self.stop_auto_solve()
+        else:
+            self.start_auto_solve()
+
+    def auto_solve_step(self):
+        now = pygame.time.get_ticks()
+        if now < self.auto_next:
+            return
+        try:
+            self.game.auto_step()
+        except ValueError as error:
+            self.set_error(str(error))
+            self.stop_auto_solve()
+            return
+        self.auto_next = now + self.AUTO_SOLVE_INTERVAL_MS
+        if self.game.is_over():
+            self.stop_auto_solve()
 
     def try_undo(self):
         self.selected_tower = None
         self.error_message = ""
+        self.clear_hint()
         try:
             self.game.undo()
         except ValueError as error:
@@ -224,6 +284,12 @@ class HanoiGUI:
             self.game.update_time()
             if self.game.is_over():
                 self.selected_tower = None
+                self.stop_auto_solve()
+                self.clear_hint()
+            elif self.auto_solving:
+                self.auto_solve_step()
+            if self.hint and pygame.time.get_ticks() > self.hint_until:
+                self.clear_hint()
 
     def set_error(self, message):
         self.error_message = message
@@ -250,6 +316,8 @@ class HanoiGUI:
         self.menu_start = start
         self.selected_tower = None
         self.error_message = ""
+        self.clear_hint()
+        self.stop_auto_solve()
         self.state = "playing"
 
     def restart_game(self):
@@ -257,11 +325,15 @@ class HanoiGUI:
         self.game.reset()
         self.selected_tower = None
         self.error_message = ""
+        self.clear_hint()
+        self.stop_auto_solve()
         self.state = "playing"
 
     def go_to_menu(self):
         self.selected_tower = None
         self.error_message = ""
+        self.clear_hint()
+        self.stop_auto_solve()
         self.state = "menu"
 
     def change_menu_disks(self, delta):
@@ -275,10 +347,17 @@ class HanoiGUI:
                 self.running = False
             else:
                 self.handle_menu_key(key)
+        elif self.auto_solving:
+            # cualquier tecla cancela el auto-resolver (Esc no sale al menú)
+            self.stop_auto_solve()
         elif key == pygame.K_ESCAPE:
             self.go_to_menu()
         elif key == pygame.K_r:
             self.restart_game()
+        elif key == pygame.K_h:
+            self.try_hint()
+        elif key == pygame.K_x:
+            self.start_auto_solve()
 
     def handle_menu_key(self, key):
         if key in (pygame.K_UP, pygame.K_RIGHT):
@@ -313,12 +392,21 @@ class HanoiGUI:
                 self.go_to_menu()
             return
 
+        if self.auto_solving:
+            # cualquier clic cancela el auto-resolver
+            self.stop_auto_solve()
+            return
+
         if self.BTN_MENU.collidepoint(pos):
             self.go_to_menu()
         elif self.BTN_RETRY.collidepoint(pos):
             self.restart_game()
         elif self.BTN_UNDO.collidepoint(pos):
             self.try_undo()
+        elif self.BTN_HINT.collidepoint(pos):
+            self.try_hint()
+        elif self.BTN_SOLVE.collidepoint(pos):
+            self.start_auto_solve()
         else:
             self.handle_click(pos)
 
@@ -374,12 +462,40 @@ class HanoiGUI:
         self.draw_text(f"INICIO: {start_label}", self.font_small,
                        self.COLOR_TEXT, topleft=(24, 168))
         self.draw_text("Esc: menú | R: reintentar", self.font_small,
-                       self.COLOR_TEXT, center=(self.WIDTH - 170, 34))
+                       self.COLOR_TEXT, center=(self.WIDTH - 170, 18))
+        self.draw_text("H: pista | X: resolver", self.font_small,
+                       self.COLOR_TEXT, center=(self.WIDTH - 170, 38))
         self.draw_undo_button()
+        self.draw_assist_buttons()
+
+    def draw_disabled_button(self, rect, label, font=None):
+        pygame.draw.rect(self.screen, self.COLOR_BUTTON_DISABLED, rect)
+        pygame.draw.rect(self.screen, self.COLOR_DISK_BORDER, rect, 4)
+        self.draw_text(label, font or self.font_small,
+                       self.COLOR_TEXT_DISABLED, center=rect.center)
+
+    def draw_assist_buttons(self):
+        if self.auto_solving:
+            self.draw_disabled_button(self.BTN_HINT, "PISTA (H)")
+            self.draw_button(self.BTN_SOLVE, "PARAR (clic)", self.font_small)
+        else:
+            self.draw_button(self.BTN_HINT, "PISTA (H)", self.font_small)
+            self.draw_button(self.BTN_SOLVE, "RESOLVER (X)", self.font_small)
+
+    def draw_hint(self):
+        if not self.hint:
+            return
+        origin, destination = self.hint
+        for index, label in ((origin, "ORIGEN"), (destination, "DESTINO")):
+            rect = self.tower_rect(index)
+            pygame.draw.rect(self.screen, self.COLOR_HINT,
+                             rect.inflate(-10, -10), 4)
+            self.draw_text(label, self.font_small, self.COLOR_HINT,
+                           center=(rect.centerx, rect.top + 20))
 
     def draw_undo_button(self):
         rect = self.BTN_UNDO
-        left = self.game.get_undo_time_left()
+        left = 0 if self.auto_solving else self.game.get_undo_time_left()
         if left > 0:
             self.draw_button(rect, f"DESHACER ({math.ceil(left)}s)",
                              self.font_small)
@@ -431,10 +547,17 @@ class HanoiGUI:
             border_color = self.COLOR_WIN
             title = "¡GANASTE!"
             title_color = self.COLOR_WIN
-            if moves == minimum:
-                note = "¡Partida perfecta!"
+            if self.game.was_auto_solved():
+                title = "RESUELTO"
+                note = "Resuelto automáticamente"
             else:
-                note = f"Te pasaste por {moves - minimum} movimientos"
+                if moves == minimum:
+                    note = "¡Partida perfecta!"
+                else:
+                    note = f"Te pasaste por {moves - minimum} movimientos"
+                hints = self.game.get_hints_used()
+                if hints:
+                    note += f" · Pistas: {hints}"
 
         pygame.draw.rect(self.screen, border_color, panel, 4)
         self.draw_text(title, self.font_big, title_color, center=(cx, 180))
@@ -546,6 +669,7 @@ class HanoiGUI:
             self.draw_poles()
             self.draw_disks()
             self.draw_selection()
+            self.draw_hint()
             self.draw_hud()
             self.draw_error()
             if self.game.is_over():
