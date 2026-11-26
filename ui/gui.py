@@ -64,6 +64,12 @@ class HanoiGUI:
     HINT_SECONDS = 4
     AUTO_SOLVE_INTERVAL_MS = 400
 
+    # Animación del disco: sube, se desplaza y baja. ANIM_MS = 0 la desactiva.
+    ANIM_MS = 300
+    ANIM_UP = 0.30
+    ANIM_DOWN = 0.30
+    ANIM_LIFT_MARGIN = 4
+
     COLOR_PANEL = (24, 14, 52)
     COLOR_BUTTON = (92, 58, 28)
     COLOR_BUTTON_HOVER = (139, 90, 43)
@@ -150,6 +156,10 @@ class HanoiGUI:
         self.history_scroll = 0
         self._history_seen = 0
         self.show_help = False
+
+        self.anim = None
+        self._anim_seen = 0
+        self._anim_last = None
 
         self.state = "menu" if show_menu else "playing"
         self.menu_disks = num_disks
@@ -328,6 +338,92 @@ class HanoiGUI:
     def close_overlays(self):
         self.show_help = False
         self.history_scroll = 0
+        self.reset_animation()
+
+    def _ticks(self):
+        return pygame.time.get_ticks()
+
+    @staticmethod
+    def ease(u):
+        return u * u * (3 - 2 * u)
+
+    def animating(self):
+        return self.anim is not None
+
+    def end_panel_visible(self):
+        """El panel de fin espera a que termine la animación del último disco."""
+        return self.game.is_over() and not self.animating()
+
+    def reset_animation(self):
+        """Corta la animación y sincroniza con el historial actual (sin animar)."""
+        self.anim = None
+        history = self.game.get_history()
+        self._anim_seen = len(history)
+        self._anim_last = history[-1] if history else None
+
+    def disk_pos(self, tower_index, level, size):
+        surface = self.disk_surface(size)
+        disk_h = self.DISK_UNITS_H * self.PIXEL
+        step = (self.DISK_UNITS_H - 1) * self.PIXEL
+        x = self.tower_center_x(tower_index) - surface.get_width() // 2
+        y = self.BASE_Y - disk_h - level * step
+        return x, y
+
+    def start_animation(self, disk, src, dst):
+        """Anima `disk` de la torre src a la dst. El estado lógico ya cambió:
+        el disco está en la cima de dst y ya no está en src."""
+        state = self.game.get_state()
+        if not state[dst] or state[dst][-1] != disk:
+            self.anim = None
+            return
+        x0, y0 = self.disk_pos(src, len(state[src]), disk)
+        x1, y1 = self.disk_pos(dst, len(state[dst]) - 1, disk)
+        lift = (self.BASE_Y - self.POLE_HEIGHT
+                - self.DISK_UNITS_H * self.PIXEL - self.ANIM_LIFT_MARGIN)
+        self.anim = {
+            "disk": disk, "src": src, "dst": dst, "start": self._ticks(),
+            "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+            "lift": min(lift, y0, y1),
+        }
+
+    def update_animation(self):
+        """Detecta un movimiento (+1 en el historial) o un deshacer (-1) y lo
+        anima. Cualquier otro cambio (reset, partida nueva) no se anima."""
+        history = self.game.get_history()
+        size = len(history)
+        delta = size - self._anim_seen
+        if delta == 1 and self.ANIM_MS > 0:
+            _n, origin, dest, disk, _t = history[-1]
+            self.start_animation(disk, origin, dest)
+        elif delta == -1 and self.ANIM_MS > 0 and self._anim_last:
+            _n, origin, dest, disk, _t = self._anim_last
+            self.start_animation(disk, dest, origin)
+        elif delta != 0:
+            self.anim = None
+        self._anim_seen = size
+        self._anim_last = history[-1] if history else None
+        if self.anim and self._ticks() - self.anim["start"] >= self.ANIM_MS:
+            self.anim = None
+
+    def anim_progress(self):
+        if not self.anim:
+            return 1.0
+        elapsed = self._ticks() - self.anim["start"]
+        return max(0.0, min(1.0, elapsed / self.ANIM_MS))
+
+    def anim_position(self, t):
+        """(x, y) del disco en vuelo para t en [0, 1]: sube, cruza y baja."""
+        a = self.anim
+        up_end = self.ANIM_UP
+        down_start = 1.0 - self.ANIM_DOWN
+        if t < up_end:
+            u = self.ease(t / up_end)
+            return a["x0"], a["y0"] + (a["lift"] - a["y0"]) * u
+        if t < down_start:
+            u = self.ease((t - up_end) / (down_start - up_end))
+            return a["x0"] + (a["x1"] - a["x0"]) * u, a["lift"]
+        u = self.ease((t - down_start) / self.ANIM_DOWN)
+        return a["x1"], a["lift"] + (a["y1"] - a["lift"]) * u
 
     def new_puzzle(self):
         """N: puzzle nuevo con los mismos discos, modo e inicio."""
@@ -337,6 +433,7 @@ class HanoiGUI:
     def update(self):
         if self.state == "playing":
             self.game.update_time()
+            self.update_animation()
             size = self.game.get_history_len()
             if size != self._history_seen:
                 self._history_seen = size
@@ -467,6 +564,8 @@ class HanoiGUI:
             return
 
         if self.game.is_over():
+            if self.animating():
+                return
             if self.BTN_WIN_RETRY.collidepoint(pos):
                 self.restart_game()
             elif self.BTN_WIN_MENU.collidepoint(pos):
@@ -791,15 +890,20 @@ class HanoiGUI:
                 pygame.draw.rect(self.screen, self.COLOR_POLE, pole)
 
     def draw_disks(self):
-        disk_h = self.DISK_UNITS_H * self.PIXEL
-        step = (self.DISK_UNITS_H - 1) * self.PIXEL
+        flying = self.anim["dst"] if self.anim else None
         for tower_index, tower in enumerate(self.game.get_state()):
-            center_x = self.tower_center_x(tower_index)
             for level, size in enumerate(tower):
-                surface = self.disk_surface(size)
-                x = center_x - surface.get_width() // 2
-                y = self.BASE_Y - disk_h - level * step
-                self.screen.blit(surface, (x, y))
+                if tower_index == flying and level == len(tower) - 1:
+                    continue  # este disco se dibuja en vuelo (draw_moving_disk)
+                self.screen.blit(self.disk_surface(size),
+                                 self.disk_pos(tower_index, level, size))
+
+    def draw_moving_disk(self):
+        if not self.anim:
+            return
+        x, y = self.anim_position(self.anim_progress())
+        self.screen.blit(self.disk_surface(self.anim["disk"]),
+                         (int(round(x)), int(round(y))))
 
     def draw_selection(self):
         if self.selected_tower is None:
@@ -819,9 +923,10 @@ class HanoiGUI:
             self.draw_hint()
             self.draw_hud()
             self.draw_history()
+            self.draw_moving_disk()
             self.draw_error()
             self.draw_help()
-            if self.game.is_over():
+            if self.end_panel_visible():
                 self.draw_end_panel()
         pygame.display.flip()
 
