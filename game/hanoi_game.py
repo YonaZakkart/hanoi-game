@@ -72,6 +72,7 @@ class HanoiGame:
         self._start_time = None
         self._end_time = None
         self._last_move = None
+        self._history = []
         self.hints_used = 0
         self.auto_solved = False
         self.reset()
@@ -226,6 +227,7 @@ class HanoiGame:
         self._start_time = None
         self._end_time = None
         self._last_move = None
+        self._history = []
         self.hints_used = 0
         self.auto_solved = False
 
@@ -303,6 +305,8 @@ class HanoiGame:
         destination.push(disk)
         self.moves += 1
         self._last_move = (from_tower, to_tower, self._clock())
+        self._history.append(
+            (self.moves, from_tower, to_tower, disk, self.get_elapsed()))
 
         if self.mode == self.MODE_PERFECT and self.moves > self.min_moves:
             self.lost = True
@@ -339,9 +343,23 @@ class HanoiGame:
         self.towers[from_tower].push(disk)
         self.moves -= 1
         self._last_move = None
+        if self._history:
+            self._history.pop()
         if self.moves == 0:
             self._start_time = None
         return disk
+
+    def get_history(self):
+        """Copia del historial: lista de (numero, origen, destino, disco, tiempo).
+
+        Torres en índices 0-2 (la GUI las muestra como 1-3). `tiempo` son los
+        segundos transcurridos desde el primer movimiento. Modificar la copia
+        no afecta al historial interno.
+        """
+        return list(self._history)
+
+    def get_history_len(self):
+        return len(self._history)
 
     def is_finished(self):
         if self.mode == self.MODE_PERFECT:
