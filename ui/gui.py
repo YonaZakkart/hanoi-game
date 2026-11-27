@@ -59,6 +59,23 @@ def hue_shift(color, degrees):
             int(round(b * 255)), alpha)
 
 
+def cut_pole_slot(surface):
+    """Abre la ranura del palo en un sprite nativo.
+
+    Son 4 px de la rejilla nativa (el mismo ancho que el agujero central) desde
+    el agujero hasta el borde superior. Al hacerse transparente, el palo que se
+    dibuja detrás asoma por la ranura y parece atravesar el disco.
+    """
+    out = surface.copy()
+    width, height = out.get_size()
+    left = width // 2 - 2
+    hole_y = max(1, int(round(height * 0.32)))
+    for y in range(hole_y + 1):
+        for x in range(left, left + 4):
+            out.set_at((x, y), (0, 0, 0, 0))
+    return out
+
+
 def tint_surface(surface, degrees):
     """Recolorea un sprite nativo píxel a píxel (solo la paleta de color)."""
     if degrees == 0:
@@ -122,11 +139,14 @@ class HanoiGUI:
     PLATFORM_Y = 476
     PLATFORM_TOP_H = 24
     BASE_Y = 500
-    POLE_HEIGHT = 370
-    POLE_WIDTH = 18
+    POLE_HEIGHT = 390
+    POLE_WIDTH = 22
     POLE_CAP_H = 5
 
-    DISK_STEP = 26
+    # Los sprites isométricos son muy altos: se aplanan un poco para que el
+    # apilado gane separación sin salirse del escenario.
+    DISK_HEIGHT_SCALE = 0.6
+    DISK_STEP = 36
     DISK_MIN_W = 140
     DISK_MAX_W = 250
 
@@ -139,7 +159,7 @@ class HanoiGUI:
     ANIM_MS = 300
     ANIM_UP = 0.30
     ANIM_DOWN = 0.30
-    ANIM_LIFT_MARGIN = 30
+    ANIM_LIFT_MARGIN = 20
 
     COLOR_PANEL = (24, 14, 52)
     COLOR_PANEL_SHADOW = (10, 6, 20)
@@ -234,7 +254,7 @@ class HanoiGUI:
         for name in DISK_ASSETS:
             sprite = load_native_sprite(name)
             if sprite is not None:
-                self.disk_sprites.append(sprite)
+                self.disk_sprites.append(cut_pole_slot(sprite))
 
         self._disk_cache = {}
         self._tint_cache = {}
@@ -327,7 +347,8 @@ class HanoiGUI:
                 self.disk_sprites[index], tint)
         sprite = self._tint_cache[key]
         height = max(1, int(round(sprite.get_height() * width
-                                  / sprite.get_width())))
+                                  / sprite.get_width()
+                                  * self.DISK_HEIGHT_SCALE)))
         return pygame.transform.scale(sprite, (width, height))
 
     def _fallback_disk(self, size, width):
