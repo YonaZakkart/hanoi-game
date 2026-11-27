@@ -132,8 +132,8 @@ GUI con Pygame (`pygame-ce`). Solo dibuja y lee eventos; las reglas siguen en `H
 |-------|---------|
 | Eventos | `handle_events`, `handle_key`, `handle_menu_key`, `handle_mouse`, `handle_click`, `tower_at` |
 | Estado | `start_game(n)`, `go_to_menu()`, `change_menu_disks(delta)`, `set_error(msg)` |
-| Dibujo | `draw`, `draw_background`, `draw_base`, `draw_poles`, `draw_disks`, `draw_selection`, `draw_hud`, `draw_error`, `draw_victory`, `draw_menu`, `draw_text`, `draw_button` |
-| Medidas | `tower_center_x`, `tower_rect`, `disk_units`, `disk_surface` |
+| Dibujo | `draw`, `draw_background`, `draw_base`, `draw_poles`, `draw_disks`, `draw_selection`, `draw_hint`, `draw_hud`, `draw_history`, `draw_error`, `draw_help`, `draw_end_panel`, `draw_menu`, `draw_text`, `draw_panel`, `draw_button` |
+| Medidas | `tower_center_x`, `tower_rect`, `disk_width`, `disk_sprite_index`, `disk_tint`, `disk_surface`, `disk_pos` |
 
 **Flujo de un movimiento**: primer clic en una torre con discos → `selected_tower`; segundo clic en otra torre → `game.move(origen, destino)`. Si lanza `ValueError`, se muestra con `set_error` (3 s). Si `game.is_finished()`, se dibuja el panel de victoria y los clics sobre las torres dejan de hacer algo.
 
@@ -148,3 +148,25 @@ Los recursos están en `assets/` (`background.png`, `base.png`, `pole_wood.png`,
 - [x] Selector de número de discos
 - [x] `main.py` lanza la GUI; `--console` conserva el modo v1
 - [x] Cierre de ventana y `Esc` / `R` funcionan
+## ui/gui.py — tema visual v3 (punto 3.8)
+
+La GUI mantiene la separación de capas: `HanoiGame` sigue siendo la única fuente de verdad y `ui/gui.py` solo dibuja y lee eventos.
+
+**Sprites de disco**
+
+- Los PNG de `assets/` (ocho tamaños, de "Pequeño pequeño" a "Enorme") miden 1024x1024 con relleno transparente. `load_native_sprite()` recorta el relleno con `Surface.get_bounding_rect()` y reduce la imagen a su rejilla nativa (un píxel de arte cada 16 px) para que el escalado posterior sea nítido.
+- `hue_shift()` y `tint_surface()` recolorean el sprite píxel a píxel: giran el tono conservando saturación y brillo, así que el sombreado y los bordes se mantienen. La paleta `DISK_TINTS` va de dorado a magenta y `disk_tint()` la reparte entre los discos de la partida (con 3 discos se usan dorado, naranja y magenta; con 10, los diez tonos).
+- `disk_width()` interpola el ancho entre `DISK_MIN_W` (140) y `DISK_MAX_W` (250) según el número de discos; `disk_sprite_index()` elige el PNG más cercano y `_disk_image()` lo escala conservando su proporción. Las superficies se cachean por `(tamaño, num_discos)` y los sprites teñidos por `(sprite, tono)`.
+- `disk_pos()` apila con `DISK_STEP = 26`: los discos isométricos se solapan lo suficiente para que 10 discos quepan bajo el palo (`POLE_HEIGHT = 370`). La animación usa la altura real del sprite y eleva el disco `ANIM_LIFT_MARGIN` por encima del apilado, no por encima del palo (los sprites son mucho más altos que los discos planos de v2).
+
+**Distribución**
+
+- HUD superior fijo (`HUD_RECT`): título, inicio, modo, discos, movimientos/mínimo y tiempo. Los botones de acción están en una barra inferior sobre la madera de la base.
+- Menú rediseñado: selectores clicables de discos (`-`/`+`), modo y inicio (flechas), botón START y una fila de vista previa con los discos del tamaño elegido y sus colores.
+- Paneles de historial (`L`), ayuda (`F1`), error y fin de partida comparten `draw_panel()` (fondo oscuro, borde de píxeles y sombra) y `draw_text()` (texto renderizado sin antialias y escalado x2 para conservar el aspecto pixel).
+
+**Sonido**
+
+`_init_sounds()` genera ondas cuadradas con el módulo `array` y las carga como `pygame.mixer.Sound` (no hay archivos de audio). Suenan al seleccionar, mover, deshacer, pedir pista, cometer un error y al ganar o perder. `M` activa o silencia; si el mezclador no está disponible, el juego sigue funcionando sin sonido.
+
+**Pruebas**: `tests/test_tema.py` cubre carga y tamaño de sprites, reparto de anchos y tonos, caché, apilado, no solape de HUD/botones y el dibujo de todas las pantallas. `tests/test_animacion.py` se adaptó a la nueva altura de disco.
