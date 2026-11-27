@@ -53,9 +53,33 @@ class SpritesTest(unittest.TestCase):
         surface = self.gui.disk_surface(1)
         self.assertIs(surface, self.gui.disk_surface(1))
         self.assertEqual(surface.get_width(), self.gui.disk_width(1))
-        # el sprite isométrico es más alto que el paso del apilado
+        # el sprite se aplana lo justo para que el apilado respire
         self.assertGreater(surface.get_height(), self.gui.DISK_STEP)
-        self.assertLess(surface.get_height(), surface.get_width())
+        self.assertLess(surface.get_height(), surface.get_width() / 2)
+
+    def test_ranura_del_palo_en_los_sprites(self):
+        for sprite in self.gui.disk_sprites:
+            width, height = sprite.get_size()
+            left = width // 2 - 2
+            hole_y = max(1, int(round(height * 0.32)))
+            for y in range(hole_y + 1):
+                for x in range(left, left + 4):
+                    self.assertEqual(sprite.get_at((x, y)).a, 0)
+            # los píxeles a los lados de la ranura siguen opacos
+            self.assertEqual(sprite.get_at((left - 1, hole_y)).a, 255)
+            self.assertEqual(sprite.get_at((left + 4, hole_y)).a, 255)
+
+    def test_el_apilado_de_diez_cabe_bajo_el_palo(self):
+        gui = HanoiGUI(num_disks=10, show_menu=False)
+        try:
+            top_y = gui.disk_pos(0, 9, 1)[1]
+            pole_top = gui.BASE_Y - gui.POLE_HEIGHT
+            self.assertGreaterEqual(top_y, pole_top)
+            self.assertGreaterEqual(top_y, gui.HUD_RECT.bottom)
+            # el palo asoma por encima del último disco
+            self.assertGreater(top_y, pole_top)
+        finally:
+            pygame.quit()
 
     def test_apilado_con_el_paso_nuevo(self):
         x0, y0 = self.gui.disk_pos(0, 0, 10)
