@@ -69,6 +69,28 @@ class SpritesTest(unittest.TestCase):
             self.assertEqual(sprite.get_at((left - 1, hole_y)).a, 255)
             self.assertEqual(sprite.get_at((left + 4, hole_y)).a, 255)
 
+    def test_mesa_cargada_y_centrada(self):
+        table = self.gui.img_table
+        self.assertIsNotNone(table)
+        width, height = table.get_size()
+        top_h = self.gui._table_top_height(table)
+        x, y = self.gui.table_pos
+        self.assertEqual(x, (self.gui.WIDTH - width) // 2)
+        self.assertEqual(y + top_h, self.gui.BASE_Y)
+        self.assertLessEqual(x + width, self.gui.WIDTH)
+        self.assertLessEqual(y + height, self.gui.HEIGHT)
+        self.assertGreater(top_h, 0)
+
+    def test_los_botones_caben_en_la_cara_de_la_mesa(self):
+        table = self.gui.img_table
+        left, top = self.gui.table_pos
+        right = left + table.get_width()
+        front_top = top + self.gui._table_top_height(table)
+        self.assertGreaterEqual(self.gui.BTN_MENU.left, left)
+        self.assertLessEqual(self.gui.BTN_SOLVE.right, right)
+        self.assertGreaterEqual(self.gui.BTN_MENU.top, front_top)
+        self.assertGreaterEqual(self.gui.BTN_SOLVE.top, front_top)
+
     def test_el_apilado_de_diez_cabe_bajo_el_palo(self):
         gui = HanoiGUI(num_disks=10, show_menu=False)
         try:
