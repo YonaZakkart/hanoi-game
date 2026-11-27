@@ -14,16 +14,17 @@ ASSETS_DIR = os.path.normpath(
 # relleno transparente; cada píxel "real" ocupa 16x16, así que se reduce a su
 # rejilla nativa antes de recolorear y escalar (pixel art nítido).
 DISK_ASSETS = (
-    "Pequeño pequeño disco naranja.png",
-    "Pequeño disco naranja .png",
-    "Pequeño mediano disco naranja .png",
-    "Mediano disco naranja .png",
-    "Grande mediano disco naranja.png",
-    "Grande disco naranja.png",
-    "Muy grande disco naranja.png",
-    "Enorme disco naranja.png",
+    "disk_1.png",
+    "disk_2.png",
+    "disk_3.png",
+    "disk_4.png",
+    "disk_5.png",
+    "disk_6.png",
+    "disk_7.png",
+    "disk_8.png",
 )
 DISK_ASSET_PIXEL = 16
+TABLE_ASSET = "table.png"
 
 
 def load_image(name):
@@ -173,13 +174,13 @@ class HanoiGUI:
     COLOR_TEXT_DISABLED = (150, 140, 160)
     COLOR_HINT = (90, 230, 130)
 
-    # Barra inferior (sobre la madera de la base)
-    BTN_MENU = pygame.Rect(40, 552, 100, 54)
-    BTN_RETRY = pygame.Rect(150, 552, 100, 54)
-    BTN_HISTORY = pygame.Rect(440, 552, 130, 54)
-    BTN_UNDO = pygame.Rect(580, 552, 140, 54)
-    BTN_HINT = pygame.Rect(730, 552, 90, 54)
-    BTN_SOLVE = pygame.Rect(830, 552, 120, 54)
+    # Barra inferior (sobre la cara frontal de la mesa)
+    BTN_MENU = pygame.Rect(54, 552, 100, 54)
+    BTN_RETRY = pygame.Rect(164, 552, 100, 54)
+    BTN_HISTORY = pygame.Rect(400, 552, 130, 54)
+    BTN_UNDO = pygame.Rect(540, 552, 140, 54)
+    BTN_HINT = pygame.Rect(690, 552, 90, 54)
+    BTN_SOLVE = pygame.Rect(790, 552, 120, 54)
 
     # Menú
     MENU_PANEL = pygame.Rect(180, 50, 600, 510)
@@ -245,6 +246,18 @@ class HanoiGUI:
 
         self.img_background = load_image("background.png")
         self.img_base = load_image("base.png")
+        self.img_table = load_image(TABLE_ASSET)
+        self.table_pos = (self.PLATFORM_X, self.PLATFORM_Y)
+        if self.img_table is not None:
+            rect = self.img_table.get_bounding_rect()
+            if rect.w > 0 and rect.h > 0:
+                self.img_table = self.img_table.subsurface(rect).copy()
+                top_h = self._table_top_height(self.img_table)
+                self.table_pos = (
+                    (self.WIDTH - self.img_table.get_width()) // 2,
+                    self.BASE_Y - top_h)
+            else:
+                self.img_table = None
         self.img_pole_wood = load_image("pole_wood.png")
         self.img_pole_steel = load_image("pole_steel.png")
         self.img_pole_wood = self._scale_pole(self.img_pole_wood)
@@ -298,6 +311,41 @@ class HanoiGUI:
         return pygame.transform.scale(
             image, (HanoiGUI.POLE_WIDTH, HanoiGUI.POLE_HEIGHT))
 
+    @staticmethod
+    def _table_top_height(image):
+        """Alto de la superficie de la mesa hasta el borde delantero.
+
+        Primero se busca el brillo del canto superior (la última fila clara);
+        el borde es la fila siguiente. Si la mesa no tiene ese brillo, se usa
+        la primera fila de la cara frontal.
+        """
+        width, height = image.get_size()
+        step = 8
+        samples = max(1, width // step)
+        highlight = None
+        for y in range(height):
+            counts = {}
+            for x in range(0, width, step):
+                color = tuple(image.get_at((x, y)))[:3]
+                counts[color] = counts.get(color, 0) + 1
+            color, matches = max(counts.items(), key=lambda item: item[1])
+            if matches > samples * 0.6:
+                if color[0] >= 200 and color[1] >= 140 and color[2] >= 90:
+                    highlight = y
+                elif highlight is not None:
+                    return highlight + 1
+        if highlight is not None:
+            return highlight + 1
+
+        front = tuple(image.get_at((width // 2, height - 8)))[:3]
+        for y in range(height):
+            matches = sum(
+                1 for x in range(0, width, step)
+                if tuple(image.get_at((x, y)))[:3] == front)
+            if matches > samples * 0.6:
+                return y
+        return height // 2
+
     def tower_center_x(self, index):
         section = self.WIDTH // self.NUM_TOWERS
         return section * index + section // 2
@@ -305,7 +353,7 @@ class HanoiGUI:
     def tower_rect(self, index):
         section = self.WIDTH // self.NUM_TOWERS
         top = self.HUD_BOTTOM + 8
-        bottom = self.PLATFORM_Y + self.PLATFORM_TOP_H + 16
+        bottom = self.PLATFORM_Y + self.PLATFORM_TOP_H
         return pygame.Rect(section * index, top, section, bottom - top)
 
     def disk_color(self, size):
@@ -1238,7 +1286,9 @@ class HanoiGUI:
             self.screen.fill(self.COLOR_BG)
 
     def draw_base(self):
-        if self.img_base:
+        if self.img_table:
+            self.screen.blit(self.img_table, self.table_pos)
+        elif self.img_base:
             self.screen.blit(self.img_base, (self.PLATFORM_X, self.PLATFORM_Y))
         else:
             pygame.draw.rect(self.screen, self.COLOR_BASE,
