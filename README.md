@@ -60,7 +60,7 @@ python main.py --console    # modo consola
 
 ### Tema visual
 
-La interfaz usa un estilo **retro pixel art**: fondo de atardecer, base de madera, palos de madera y acero, paneles con borde de píxeles y texto pixelado. Los discos son sprites isométricos (`assets/*disco naranja*.png`); al cargarlos se recortan a su rejilla nativa de píxeles y se recolorean por tono, de modo que cada tamaño tenga un color distinto sin salir de la paleta del tema (dorado → naranja → rojo → magenta). Cada sprite lleva una ranura transparente de 4 px desde el agujero central hasta el borde superior, para que el palo se vea pasar por el agujero, y se aplana ligeramente para que el apilado tenga separación entre discos. Los efectos de sonido se generan por código, así que no hacen falta archivos de audio.
+La interfaz usa un estilo **retro pixel art**: fondo de atardecer, mesa de madera (`assets/table.png`), palos de madera y acero, paneles con borde de píxeles y texto pixelado. Los discos son sprites isométricos (`assets/disk_1.png` … `disk_8.png`); al cargarlos se recortan a su rejilla nativa de píxeles y se recolorean por tono, de modo que cada tamaño tenga un color distinto sin salir de la paleta del tema (dorado → naranja → rojo → magenta). Cada sprite lleva una ranura transparente de 4 px desde el agujero central hasta el borde superior, para que el palo se vea pasar por el agujero, y se aplana ligeramente para que el apilado tenga separación entre discos. Los efectos de sonido se generan por código, así que no hacen falta archivos de audio.
 
 ## Cómo jugar (consola)
 
