@@ -923,7 +923,7 @@ class HanoiGUI:
         self.draw_text("F1 ATAJOS", self.font_small, self.COLOR_TEXT_MUTED,
                        topleft=(214, 60), shadow=False)
 
-        for x in (330, 500, 600, 780):
+        for x in (330, 500, 600, 800):
             pygame.draw.line(self.screen, (70, 45, 110),
                              (x, 18), (x, 86), 2)
 
@@ -944,11 +944,11 @@ class HanoiGUI:
             left = self.game.get_time_left()
             color = (self.COLOR_ERROR
                      if left <= self.TIME_WARNING_SECONDS else self.COLOR_TEXT)
-            self.draw_hud_card(792, "RESTA",
+            self.draw_hud_card(812, "RESTA",
                                format_time(math.ceil(left)), self.font_hud,
                                color)
         else:
-            self.draw_hud_card(792, "TIEMPO",
+            self.draw_hud_card(812, "TIEMPO",
                                format_time(self.game.get_elapsed()),
                                self.font_hud)
 
@@ -1234,6 +1234,11 @@ class HanoiGUI:
             self._base_shadow = shadow
         self.screen.blit(self._base_shadow, (0, 0))
 
+    def draw_tower_numbers(self):
+        for i in range(self.NUM_TOWERS):
+            self.draw_text(str(i + 1), self.font_small, self.COLOR_TEXT_SOFT,
+                           center=(self.tower_center_x(i), 532))
+
     def draw_poles(self):
         for i in range(self.NUM_TOWERS):
             image = (self.img_pole_steel if i == self.NUM_TOWERS - 1
@@ -1275,6 +1280,7 @@ class HanoiGUI:
         else:
             self.draw_background()
             self.draw_base()
+            self.draw_tower_numbers()
             self.draw_poles()
             self.draw_disks()
             self.draw_selection()
