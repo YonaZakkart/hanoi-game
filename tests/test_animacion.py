@@ -68,11 +68,15 @@ class AnimacionTest(unittest.TestCase):
             self.assertGreaterEqual(y, a["lift"])
             self.assertLessEqual(y, max(a["y0"], a["y1"]))
 
-    def test_la_elevacion_libera_la_punta_del_palo(self):
+    def test_la_elevacion_queda_por_encima_del_apilado(self):
         self.move(0, 2)
-        pole_top = self.gui.BASE_Y - self.gui.POLE_HEIGHT
-        disk_h = self.gui.DISK_UNITS_H * self.gui.PIXEL
-        self.assertLessEqual(self.gui.anim["lift"] + disk_h, pole_top)
+        anim = self.gui.anim
+        self.assertEqual(
+            anim["lift"], min(anim["y0"], anim["y1"]) - self.gui.ANIM_LIFT_MARGIN)
+        self.assertLess(anim["lift"], min(anim["y0"], anim["y1"]))
+        # el disco en vuelo usa el sprite real (más alto que el paso del apilado)
+        surface = self.gui.disk_surface(anim["disk"])
+        self.assertGreater(surface.get_height(), self.gui.DISK_STEP)
 
     def test_disco_en_vuelo_no_se_dibuja_en_su_torre(self):
         self.move(0, 2)
